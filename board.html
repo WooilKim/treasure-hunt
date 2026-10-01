@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>보물 캡슐 현황</title>
+<style>
+  :root { --bg:#2b1d12; --ink:#fff6ea; --muted:#c9b39a; --accent:#ff8a3d; --bar:#4a3424; }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; background:radial-gradient(circle at 50% 0%, #4a2e18, var(--bg) 70%); color:var(--ink);
+         font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif; display:flex; align-items:center; justify-content:center; }
+  main { text-align:center; padding:24px 16px; width:100%; max-width:1100px; }
+  h1 { font-size:clamp(24px,4vw,48px); margin:0; }
+  .sub { color:var(--muted); font-size:clamp(14px,2vw,22px); margin-top:8px; }
+  .num { font-size:clamp(120px,26vw,320px); font-weight:900; line-height:1; color:var(--accent); margin:24px 0 0; font-variant-numeric:tabular-nums; transition:transform .3s; }
+  .num.pop { transform:scale(1.08); }
+  .label { font-size:clamp(18px,3vw,36px); color:var(--muted); }
+  .bar { height:22px; background:var(--bar); border-radius:99px; overflow:hidden; margin:36px auto 10px; max-width:800px; }
+  .fill { height:100%; background:linear-gradient(90deg,#ffb36b,var(--accent)); width:0; transition:width .6s; }
+  .meta, .recent { color:var(--muted); font-size:clamp(14px,1.8vw,20px); }
+  .recent { margin-top:28px; min-height:1.5em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🎁 남은 보물 캡슐</h1>
+  <div class="sub">캡슐을 찾으면 카드 뒷면 QR을 스캔하세요 · 1인 1개</div>
+  <div class="num" id="num">–</div>
+  <div class="label">개 남았어요</div>
+  <div class="bar"><div class="fill" id="fill"></div></div>
+  <div class="meta" id="meta"></div>
+  <div class="recent" id="recent"></div>
+</main>
+<script>
+  let last = null;
+  function render(s) {
+    const num = document.getElementById("num");
+    num.textContent = s.remaining;
+    if (last !== null && s.remaining !== last) { num.classList.add("pop"); setTimeout(() => num.classList.remove("pop"), 300); }
+    last = s.remaining;
+    document.getElementById("fill").style.width = (s.total ? s.claimed / s.total * 100 : 0) + "%";
+    document.getElementById("meta").textContent = `전체 ${s.total}개 중 ${s.claimed}개 발견`;
+    document.getElementById("recent").textContent = s.recent.length ? "최근 발견: " + s.recent.map(n => "#" + n).join("  ") : "";
+  }
+  const API = "https://script.google.com/macros/s/AKfycbzyutzVn-DOAiLSCu-HCLTPK896NtdJvj74GlkOLojGBbI0Zn_k-ImG5G2n1IK3fpTCjQ/exec";
+  async function tick() {
+    try {
+      const res = await fetch(API + "?api=stats");
+      render(await res.json());
+      setTimeout(tick, 3000);
+    } catch (e) {
+      document.getElementById("meta").textContent = "연결 확인 중…";
+      setTimeout(tick, 5000);
+    }
+  }
+  tick();
+</script>
+</body>
+</html>

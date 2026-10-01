@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>보물 캡슐 등록</title>
+<style>
+  :root { --bg:#fbf4e8; --card:#fff; --ink:#3b2a1a; --muted:#8a7560; --accent:#d9622b; --err:#c0392b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif; }
+  main { max-width:420px; margin:0 auto; padding:32px 16px; }
+  .card { background:var(--card); border-radius:20px; padding:28px 22px; box-shadow:0 6px 24px rgba(80,50,20,.08); text-align:center; }
+  .emoji { font-size:56px; }
+  h1 { font-size:22px; margin:8px 0 4px; }
+  p { color:var(--muted); line-height:1.5; margin:6px 0; }
+  .no { display:inline-block; margin-top:8px; padding:4px 12px; border-radius:99px; background:#f6e3d3; color:var(--accent); font-weight:700; }
+  form { margin-top:20px; text-align:left; }
+  label { display:block; font-size:14px; font-weight:600; margin:14px 0 6px; }
+  input { width:100%; font-size:17px; padding:13px 14px; border:1.5px solid #e4d6c4; border-radius:12px; background:#fffdf9; }
+  input:focus { outline:none; border-color:var(--accent); }
+  button { width:100%; margin-top:22px; padding:15px; font-size:17px; font-weight:700; color:#fff; background:var(--accent); border:0; border-radius:12px; }
+  button:disabled { opacity:.5; }
+  .msg { margin-top:14px; color:var(--err); font-size:14px; min-height:1em; }
+  .big { font-size:40px; font-weight:800; color:var(--accent); }
+</style>
+</head>
+<body>
+<main><div class="card" id="view"></div></main>
+<script>
+  const API = "https://script.google.com/macros/s/AKfycbzyutzVn-DOAiLSCu-HCLTPK896NtdJvj74GlkOLojGBbI0Zn_k-ImG5G2n1IK3fpTCjQ/exec";
+  const code = (new URLSearchParams(location.search).get("k") || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const view = document.getElementById("view");
+
+  async function claim(code, name, knox) {
+    // text/plain 이라 CORS preflight 없이 전송, 쿠키는 보내지 않음
+    const res = await fetch(API, { method: "POST", body: JSON.stringify({ code, name, knox }) });
+    return res.json();
+  }
+
+  function show(emoji, title, body) {
+    view.innerHTML = `<div class="emoji">${emoji}</div><h1></h1><div class="body"></div>`;
+    view.querySelector("h1").textContent = title;
+    view.querySelector(".body").innerHTML = body;
+  }
+
+  function renderForm() {
+    view.innerHTML = `
+      <div class="emoji">🎁</div>
+      <h1>보물 캡슐을 찾았어요!</h1>
+      <p>이름과 Knox ID를 입력하면 등록돼요.<br>상품은 행사 후에 따로 알려드려요.</p>
+      <form id="f">
+        <label for="name">이름</label>
+        <input id="name" autocomplete="name" maxlength="30" required>
+        <label for="knox">Knox ID</label>
+        <input id="knox" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="40" required>
+        <button id="btn">등록하기</button>
+        <div class="msg" id="msg"></div>
+      </form>
+      <p style="font-size:13px;margin-top:16px">※ 1인 1개만 등록할 수 있어요.</p>`;
+    document.getElementById("f").addEventListener("submit", submit);
+  }
+
+  async function submit(e) {
+    e.preventDefault();
+    const btn = document.getElementById("btn"), msg = document.getElementById("msg");
+    const name = document.getElementById("name").value.trim();
+    const knox = document.getElementById("knox").value.trim();
+    if (!name || !knox) { msg.textContent = "이름과 Knox ID를 모두 입력해 주세요."; return; }
+    btn.disabled = true; btn.textContent = "등록 중…"; msg.textContent = "";
+    try {
+      const r = await claim(code, name, knox);
+      switch (r.status) {
+        case "ok":
+          show("🎉", "등록 완료!", `<span class="no">캡슐 #${r.no}</span>
+            <p style="margin-top:14px">어떤 선물인지는 행사 후에 공개돼요.<br>캡슐 속 카드는 잘 보관해 주세요!</p>
+            <p style="margin-top:14px">남은 캡슐</p><div class="big">${r.remaining}</div>`);
+          break;
+        case "mine":
+          show("✅", "이미 등록하셨어요", `<span class="no">캡슐 #${r.no}</span><p>이 캡슐은 회원님 이름으로 등록돼 있어요.</p>`);
+          break;
+        case "taken":
+          show("🙈", "이미 등록된 캡슐이에요", `<p>다른 분이 먼저 등록한 캡슐이에요.<br>본부에 가져다주세요.</p>`);
+          break;
+        case "already_has":
+          show("🤝", "이미 캡슐 1개를 등록하셨어요", `<p>1인 1개까지만 등록할 수 있어요.<br>이 캡슐은 아직 못 찾은 동료에게 선물해 주세요!</p>`);
+          break;
+        case "invalid":
+          show("❓", "확인할 수 없는 QR이에요", `<p>본부에 문의해 주세요.</p>`);
+          break;
+        default:
+          msg.textContent = "입력값을 확인해 주세요."; btn.disabled = false; btn.textContent = "등록하기";
+      }
+    } catch (err) {
+      msg.textContent = "잠시 후 다시 시도해 주세요.";
+      btn.disabled = false; btn.textContent = "등록하기";
+    }
+  }
+
+  if (!code) show("❓", "QR 코드를 다시 찍어 주세요", "<p>캡슐 속 카드 뒷면의 QR을 스캔해 주세요.</p>");
+  else renderForm();
+</script>
+</body>
+</html>
