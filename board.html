@@ -46,7 +46,7 @@
   const API = "https://script.google.com/macros/s/AKfycbzyutzVn-DOAiLSCu-HCLTPK896NtdJvj74GlkOLojGBbI0Zn_k-ImG5G2n1IK3fpTCjQ/exec";
   async function tick() {
     try {
-      const res = await fetch(API + "?api=stats");
+      const res = await fetch(API + "?api=stats", { credentials: "omit" });
       render(await res.json());
       setTimeout(tick, 3000);
     } catch (e) {

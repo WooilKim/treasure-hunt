@@ -32,8 +32,9 @@
   const view = document.getElementById("view");
 
   async function claim(code, name, knox) {
-    // text/plain 이라 CORS preflight 없이 전송, 쿠키는 보내지 않음
-    const res = await fetch(API, { method: "POST", body: JSON.stringify({ code, name, knox }) });
+    // GET + 쿠키 미전송: 구글 계정 로그인 상태와 무관하게 동작
+    const q = new URLSearchParams({ api: "claim", k: code, name, knox });
+    const res = await fetch(API + "?" + q, { credentials: "omit" });
     return res.json();
   }
 
