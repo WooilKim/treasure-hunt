@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>사진 공모전 · 투표</title>
+<style>
+  :root { --bg:#fbf4e8; --card:#fff; --ink:#3b2a1a; --muted:#8a7560; --accent:#d9622b; --err:#c0392b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif; }
+  main { max-width:720px; margin:0 auto; padding:20px 12px 40px; }
+  .card { max-width:420px; margin:12px auto 0; background:var(--card); border-radius:20px; padding:28px 22px; box-shadow:0 6px 24px rgba(80,50,20,.08); text-align:center; }
+  .emoji { font-size:56px; }
+  h1 { font-size:22px; margin:8px 0 4px; }
+  p { color:var(--muted); line-height:1.5; margin:6px 0; }
+  form { margin-top:20px; text-align:left; }
+  label { display:block; font-size:14px; font-weight:600; margin:14px 0 6px; }
+  input { width:100%; font-size:17px; padding:13px 14px; border:1.5px solid #e4d6c4; border-radius:12px; background:#fffdf9; }
+  input:focus { outline:none; border-color:var(--accent); }
+  form button, .card button { width:100%; margin-top:22px; padding:15px; font-size:17px; font-weight:700; color:#fff; background:var(--accent); border:0; border-radius:12px; }
+  .msg { margin-top:14px; color:var(--err); font-size:14px; min-height:1em; }
+  .top { position:sticky; top:0; z-index:2; display:flex; justify-content:space-between; align-items:center; padding:12px 6px; background:var(--bg); }
+  .top h1 { margin:0; font-size:19px; }
+  .left { font-size:22px; color:var(--accent); letter-spacing:2px; }
+  .hint { padding:0 6px 10px; font-size:14px; }
+  .grid { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+  @media (min-width:600px) { .grid { grid-template-columns:repeat(3,1fr); } }
+  .item { position:relative; border-radius:14px; overflow:hidden; background:#f1e6d8; aspect-ratio:3/4; }
+  .item img { width:100%; height:100%; object-fit:cover; display:block; }
+  .heart { position:absolute; right:8px; bottom:8px; width:48px; height:48px; border-radius:50%; border:0; background:rgba(255,255,255,.92); font-size:24px; color:var(--accent); box-shadow:0 2px 8px rgba(0,0,0,.15); }
+  .heart:disabled { opacity:.6; }
+  .tag { position:absolute; left:8px; bottom:8px; padding:4px 10px; border-radius:99px; background:rgba(59,42,26,.8); color:#fff; font-size:13px; }
+  .who { margin-top:24px; font-size:13px; text-align:center; }
+  .who a { color:var(--muted); }
+  #big { position:fixed; inset:0; z-index:5; background:rgba(0,0,0,.9); display:none; align-items:center; justify-content:center; }
+  #big.on { display:flex; }
+  #big img { max-width:100%; max-height:100%; }
+  #toast { position:fixed; left:50%; bottom:28px; z-index:6; transform:translate(-50%,20px); background:#3b2a1a; color:#fff; padding:12px 18px; border-radius:12px; font-size:15px; opacity:0; transition:.25s; pointer-events:none; max-width:90vw; }
+  #toast.on { opacity:1; transform:translate(-50%,0); }
+</style>
+</head>
+<body>
+<main id="view"></main>
+<div id="big"><img alt="크게 보기"></div>
+<script src="contest.js"></script>
+<script>
+  const view = document.getElementById("view");
+  const big = document.getElementById("big");
+  const REASON = {
+    limit: n => `${n}표를 모두 썼어요. 다른 사진의 하트를 취소하면 다시 투표할 수 있어요.`,
+    own: () => "내 사진에는 투표할 수 없어요.",
+    closed: () => "투표 기간이 아니에요.",
+    not_found: () => "사진을 찾을 수 없어요. 새로고침해 주세요.",
+    bad_input: () => KNOX_HELP + " 아래 '다시 입력'으로 고쳐 주세요.",
+  };
+  let me, g;
+  // 투표 상태 = 서버가 마지막으로 알려 준 내 투표(server) + 아직 처리 중인 내 의도(intents)
+  // 요청은 queue로 하나씩 보내 응답 순서가 뒤바뀌지 않게 한다
+  // gen: 사용자 세대. 다시 입력하면 늘어나고, 이전 세대의 늦은 응답은 버린다
+  let server = new Set(), intents = new Map(), queue = [], gen = 0, runningGen = -1;
+
+  // id → { on: 마지막으로 원한 상태, n: 아직 끝나지 않은 요청 수 }
+  function shown() {
+    const s = new Set(server);
+    intents.forEach((it, id) => { it.on ? s.add(id) : s.delete(id); });
+    return s;
+  }
+
+  function resetVotes() {
+    server = new Set(); intents = new Map(); queue = [];
+  }
+
+  // Knox ID로 고정한 무작위 순서 (사람마다 다르고, 새로고침해도 같음)
+  function shuffle(list, seedText) {
+    let h = 2166136261;
+    for (const ch of seedText) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+    const rand = () => { h = Math.imul(h ^ (h >>> 15), 2246822507) + 0x6d2b79f5 | 0; return ((h >>> 0) % 1000003) / 1000003; };
+    const a = list.slice();
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    return a;
+  }
+
+  function card(html) {
+    view.innerHTML = `<div class="card">${html}</div>`;
+  }
+
+  function who() {
+    return `<p class="who">${esc(me.name)} (${esc(me.knox)}) 님이 아니신가요? <a href="#" id="relogin">다시 입력</a></p>`;
+  }
+  function bindWho() {
+    view.querySelector("#relogin").onclick = e => { e.preventDefault(); clearMe(); start(); };
+  }
+
+  async function start() {
+    const my = ++gen;
+    resetVotes();
+    let user = getMe();
+    if (!user) {
+      view.innerHTML = `<div class="card"></div>`;
+      user = await askMe(view.firstChild, { emoji: "💖", title: "사진 공모전 투표", desc: "마음에 드는 사진에 하트를 눌러 주세요.<br>이름과 Knox ID는 이 폰에 기억돼요." });
+      if (my !== gen) return;
+    }
+    me = user;
+    card(`<div class="emoji">⏳</div><p>사진을 불러오는 중…</p>`);
+    let r;
+    try {
+      r = await apiGet({ api: "gallery", knox: me.knox });
+    } catch (e) {
+      if (my !== gen) return;
+      card(`<div class="emoji">📶</div><h1>연결이 원활하지 않아요</h1><button id="retry">다시 시도</button>`);
+      view.querySelector("#retry").onclick = start;
+      return;
+    }
+    if (my !== gen) return;
+    g = r;
+    if (!g.vote_open) {
+      card(`<div class="emoji">🕰️</div><h1>지금은 투표 기간이 아니에요</h1><p>투표가 시작되면 다시 열어 주세요.</p><button id="retry">새로고침</button>${who()}`);
+      view.querySelector("#retry").onclick = start;
+      bindWho();
+      return;
+    }
+    server = new Set(g.my_votes);
+    render();
+  }
+
+  function render() {
+    const per = g.votes_per_person;
+    const myVotes = shown();
+    const left = Math.max(0, per - myVotes.size);
+    view.innerHTML = `
+      <div class="top"><h1>📸 사진 공모전</h1><div class="left" aria-label="남은 표 ${left}개">${"♥".repeat(myVotes.size)}${"♡".repeat(left)}</div></div>
+      <p class="hint">마음에 드는 사진 ${per}장에 하트를 눌러 주세요. 다시 누르면 취소돼요.</p>
+      <div class="grid">${shuffle(g.photos, me.knox).map(p => `
+        <div class="item">
+          <img src="${esc(p.src)}" alt="사진 ${p.id}" loading="lazy" data-big="${esc(p.src)}">
+          ${p.id === g.mine
+            ? `<span class="tag">내 사진</span>`
+            : `<button class="heart" data-id="${p.id}" aria-pressed="${myVotes.has(p.id)}">${myVotes.has(p.id) ? "♥" : "♡"}</button>`}
+        </div>`).join("")}</div>
+      ${g.photos.length ? "" : `<div class="card"><p>아직 올라온 사진이 없어요.</p></div>`}
+      ${who()}`;
+    bindWho();
+  }
+
+  view.addEventListener("click", e => {
+    const img = e.target.closest("img[data-big]");
+    if (img) { big.querySelector("img").src = img.dataset.big; big.classList.add("on"); return; }
+    const btn = e.target.closest(".heart");
+    if (!btn) return;
+    const id = Number(btn.dataset.id);
+    const now = shown();
+    const on = !now.has(id);
+    if (on && now.size >= g.votes_per_person) { toast(REASON.limit(g.votes_per_person)); return; }
+    // 먼저 화면에 반영하고 요청은 줄 세워 보낸다
+    const it = intents.get(id) || { on, n: 0 };
+    it.on = on; it.n++;
+    intents.set(id, it);
+    queue.push({ id, on });
+    render();
+    drain();
+  });
+
+  // 대기 중인 투표 요청을 하나씩 보낸다 (세대가 바뀌면 멈춘다)
+  async function drain() {
+    if (runningGen === gen) return;
+    const my = runningGen = gen, knox = me.knox;
+    while (my === gen && queue.length) {
+      const { id, on } = queue.shift();
+      let r = null;
+      try {
+        r = await apiGet({ api: "vote", knox, photo: id, on: on ? 1 : 0 });
+      } catch (err) {}
+      if (my !== gen) break;
+      const it = intents.get(id);
+      if (it && --it.n <= 0) intents.delete(id);
+      if (!r) {
+        toast("연결이 원활하지 않아요. 다시 눌러 주세요.");
+        await resync(my, knox);
+      } else {
+        if (r.my_votes) server = new Set(r.my_votes);
+        if (r.status !== "ok") toast((REASON[r.status] || (() => "잠시 후 다시 시도해 주세요."))(g.votes_per_person));
+      }
+      if (my === gen) render();
+    }
+    if (runningGen === my) runningGen = -1;
+  }
+
+  // 네트워크 실패 뒤에는 서버 상태를 다시 받아 맞춘다
+  async function resync(my, knox) {
+    try {
+      const r = await apiGet({ api: "gallery", knox });
+      if (my === gen && r.vote_open) server = new Set(r.my_votes);
+    } catch (e) {}
+  }
+
+  big.addEventListener("click", () => big.classList.remove("on"));
+  start();
+</script>
+</body>
+</html>

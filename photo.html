@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>사진 공모전 · 제출</title>
+<style>
+  :root { --bg:#fbf4e8; --card:#fff; --ink:#3b2a1a; --muted:#8a7560; --accent:#d9622b; --err:#c0392b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif; }
+  main { max-width:420px; margin:0 auto; padding:32px 16px; }
+  .card { background:var(--card); border-radius:20px; padding:28px 22px; box-shadow:0 6px 24px rgba(80,50,20,.08); text-align:center; }
+  .emoji { font-size:56px; }
+  h1 { font-size:22px; margin:8px 0 4px; }
+  p { color:var(--muted); line-height:1.5; margin:6px 0; }
+  form { margin-top:20px; text-align:left; }
+  label { display:block; font-size:14px; font-weight:600; margin:14px 0 6px; }
+  input { width:100%; font-size:17px; padding:13px 14px; border:1.5px solid #e4d6c4; border-radius:12px; background:#fffdf9; }
+  input:focus { outline:none; border-color:var(--accent); }
+  button, .btn { display:block; width:100%; margin-top:22px; padding:15px; font-size:17px; font-weight:700; color:#fff; background:var(--accent); border:0; border-radius:12px; text-align:center; text-decoration:none; }
+  .btn.ghost { background:#f6e3d3; color:var(--accent); margin-top:10px; }
+  button:disabled { opacity:.5; }
+  .msg { margin-top:14px; color:var(--err); font-size:14px; min-height:1em; }
+  .photo { width:100%; margin-top:18px; border-radius:14px; background:#f1e6d8; aspect-ratio:3/4; object-fit:cover; }
+  .who { margin-top:18px; font-size:13px; }
+  .who a { color:var(--muted); }
+  #file { display:none; }
+  #toast { position:fixed; left:50%; bottom:28px; transform:translate(-50%,20px); background:#3b2a1a; color:#fff; padding:12px 18px; border-radius:12px; font-size:15px; opacity:0; transition:.25s; pointer-events:none; max-width:90vw; }
+  #toast.on { opacity:1; transform:translate(-50%,0); }
+</style>
+</head>
+<body>
+<main><div class="card" id="view"></div></main>
+<input type="file" id="file" accept="image/*">
+<script src="contest.js"></script>
+<script>
+  const view = document.getElementById("view");
+  const fileInput = document.getElementById("file");
+  let me = getMe();
+  // gen: 사용자 세대(다시 입력·새로 시작 때 증가), job: 사진 고르기 작업 번호
+  // 늦게 도착한 이전 세대·이전 작업의 결과는 화면에 반영하지 않는다
+  // shownJob: 지금 미리보기로 떠 있는 작업 번호 (없으면 0)
+  let gen = 0, job = 0, shownJob = 0, uploading = false;
+
+  function who() {
+    return `<p class="who">${esc(me.name)} (${esc(me.knox)}) 님이 아니신가요? <a href="#" id="relogin">다시 입력</a></p>`;
+  }
+  function bindWho() {
+    view.querySelector("#relogin").onclick = e => { e.preventDefault(); clearMe(); start(); };
+  }
+
+  function pick() {
+    if (!uploading) fileInput.click();
+  }
+
+  async function start() {
+    const g = ++gen;
+    job++;
+    shownJob = 0;
+    uploading = false;
+    const user = getMe() || await askMe(view, { emoji: "📸", title: "사진 공모전", desc: "공원에서 찍은 팀원 사진을 1장 올려 주세요.<br>이름과 Knox ID는 이 폰에 기억돼요." });
+    if (g !== gen) return;
+    me = user;
+    view.innerHTML = `<div class="emoji">⏳</div><p>불러오는 중…</p>`;
+    try {
+      const s = await apiGet({ api: "my_photo", knox: me.knox });
+      if (g === gen) render(s);
+    } catch (e) {
+      if (g !== gen) return;
+      view.innerHTML = `<div class="emoji">📶</div><h1>연결이 원활하지 않아요</h1><button id="retry">다시 시도</button>`;
+      view.querySelector("#retry").onclick = start;
+    }
+  }
+
+  function render(s) {
+    shownJob = 0;
+    if (!s.submit_open) {
+      view.innerHTML = `<div class="emoji">🔒</div><h1>사진 제출이 마감됐어요</h1>
+        ${s.src ? `<p>내가 낸 사진</p><img class="photo" src="${esc(s.src)}" alt="내 사진">` : ""}
+        ${s.vote_open ? `<a class="btn" href="vote.html">투표하러 가기</a>` : `<p>투표가 시작되면 알려드릴게요.</p>`}
+        ${who()}`;
+      bindWho();
+      return;
+    }
+    view.innerHTML = s.src
+      ? `<div class="emoji">✅</div><h1>사진을 제출했어요</h1><p>마감 전까지 다른 사진으로 바꿀 수 있어요.</p>
+         <img class="photo" src="${esc(s.src)}" alt="내 사진">
+         <button class="btn ghost" id="pick">다른 사진으로 교체</button>${who()}`
+      : `<div class="emoji">📸</div><h1>사진 공모전</h1><p>공원에서 찍은 팀원 사진을 1장 올려 주세요.<br>마감 전까지 바꿀 수 있어요.</p>
+         <button id="pick">사진 찍기 · 고르기</button>${who()}`;
+    view.querySelector("#pick").onclick = pick;
+    bindWho();
+  }
+
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files[0];
+    fileInput.value = "";
+    if (!file || uploading) return;
+    const g = gen, j = ++job;
+    let image;
+    try {
+      image = await shrinkImage(file);
+    } catch (e) {
+      if (g !== gen || j !== job) return;
+      toast("이 사진은 열 수 없어요. 다른 사진을 골라 주세요.");
+      if (shownJob) job = shownJob; // 떠 있던 미리보기의 '제출하기'가 다시 동작하게
+      return;
+    }
+    if (g !== gen || j !== job || uploading) return; // 그 사이 다른 사진을 골랐거나 사용자가 바뀜
+    view.innerHTML = `<div class="emoji">🖼️</div><h1>이 사진으로 낼까요?</h1>
+      <img class="photo" src="${image}" alt="미리보기">
+      <button id="send">제출하기</button>
+      <button class="btn ghost" id="again">다시 고르기</button>
+      <div class="msg" id="msg"></div>`;
+    shownJob = j;
+    view.querySelector("#again").onclick = pick;
+    view.querySelector("#send").onclick = () => send(image, j);
+  });
+
+  // 업로드 중에는 제출·다시 고르기·파일 선택을 모두 잠근다
+  function lock(on) {
+    uploading = on;
+    view.querySelectorAll("#send, #again").forEach(b => { b.disabled = on; });
+    const btn = view.querySelector("#send");
+    if (btn) btn.textContent = on ? "올리는 중…" : "제출하기";
+  }
+
+  async function send(image, j) {
+    if (uploading || j !== job) return;
+    const g = gen, user = me;
+    const msg = view.querySelector("#msg");
+    lock(true); msg.textContent = "";
+    let r, failed = false;
+    try {
+      r = await apiPost({ action: "photo_submit", name: user.name, knox: user.knox, image });
+    } catch (e) {
+      failed = true;
+    }
+    if (g !== gen || j !== job) return; // 이전 사용자·작업의 늦은 응답
+    lock(false);
+    if (failed) { msg.textContent = "업로드에 실패했어요. 잠시 후 다시 시도해 주세요."; return; }
+    if (r.status === "ok") {
+      toast(r.replaced ? "사진을 교체했어요" : "제출 완료!");
+      render({ submit_open: true, src: r.src });
+      return;
+    }
+    if (r.status === "closed") { render({ submit_open: false }); return; }
+    msg.textContent = r.status === "bad_input"
+      ? `이름(30자 이하)·사진을 확인해 주세요. ${KNOX_HELP}`
+      : "잠시 후 다시 시도해 주세요.";
+  }
+
+  start();
+</script>
+</body>
+</html>
