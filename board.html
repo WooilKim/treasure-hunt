@@ -7,20 +7,30 @@
 <style>
   :root { --bg:#2b1d12; --ink:#fff6ea; --muted:#c9b39a; --accent:#ff8a3d; --bar:#4a3424; }
   * { box-sizing:border-box; }
-  html, body { height:100%; }
+  html, body { min-height:100vh; }
   body { margin:0; background:radial-gradient(circle at 50% 0%, #4a2e18, var(--bg) 70%); color:var(--ink);
          font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif; display:flex; align-items:center; justify-content:center; }
-  main { text-align:center; padding:24px 16px; width:100%; max-width:1100px; }
+  main { text-align:center; padding:clamp(8px,2vh,24px) 16px; width:100%; max-width:1100px; }
   h1 { font-size:clamp(24px,4vw,48px); margin:0; }
   .sub { color:var(--muted); font-size:clamp(14px,2vw,22px); margin-top:8px; }
-  .num { font-size:clamp(120px,26vw,320px); font-weight:900; line-height:1; color:var(--accent); margin:24px 0 0; font-variant-numeric:tabular-nums; transition:transform .3s; }
+  .num { font-size:clamp(90px,min(26vw,27vh),320px); font-weight:900; line-height:1; color:var(--accent); margin:clamp(8px,2vh,24px) 0 0; font-variant-numeric:tabular-nums; transition:transform .3s; }
   .num.pop { transform:scale(1.08); }
   .label { font-size:clamp(18px,3vw,36px); color:var(--muted); }
-  .bar { height:22px; background:var(--bar); border-radius:99px; overflow:hidden; margin:36px auto 10px; max-width:800px; }
+  .bar { height:22px; background:var(--bar); border-radius:99px; overflow:hidden; margin:clamp(14px,3.3vh,36px) auto 10px; max-width:800px; }
   .fill { height:100%; background:linear-gradient(90deg,#ffb36b,var(--accent)); width:0; transition:width .6s; }
   .meta, .recent { color:var(--muted); font-size:clamp(14px,1.8vw,20px); }
-  .recent { margin-top:28px; min-height:1.5em; }
+  .recent { margin-top:clamp(8px,2.6vh,28px); min-height:1.5em; }
+  .links { display:grid; grid-template-columns:1fr 1fr; gap:clamp(12px,2vw,28px); margin:clamp(12px,3vh,44px) auto 0; max-width:1000px; }
+  .link { display:flex; align-items:center; gap:clamp(12px,2vw,24px); padding:clamp(12px,2vw,22px); border-radius:20px; background:rgba(255,246,234,.08); text-align:left; transition:opacity .4s; }
+  .link.off { opacity:.35; }
+  .qr { flex:none; background:#fff; padding:8px; border-radius:12px; line-height:0; }
+  .qr img, .qr canvas { width:clamp(90px,min(12vw,16vh),170px) !important; height:clamp(90px,min(12vw,16vh),170px) !important; }
+  .link h2 { margin:0; font-size:clamp(18px,2.6vw,32px); }
+  .link p { margin:6px 0 0; color:var(--muted); font-size:clamp(13px,1.6vw,20px); }
+  .link .state { display:inline-block; margin-top:8px; padding:2px 10px; border-radius:99px; background:var(--bar); font-size:clamp(12px,1.4vw,16px); }
+  .link .state:empty { display:none; }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
 <main>
@@ -31,6 +41,16 @@
   <div class="bar"><div class="fill" id="fill"></div></div>
   <div class="meta" id="meta"></div>
   <div class="recent" id="recent"></div>
+  <div class="links">
+    <div class="link" id="submit">
+      <div class="qr" data-path="photo.html"></div>
+      <div><h2>📸 사진 제출</h2><p>공원에서 찍은 팀원 사진 1장</p><span class="state"></span></div>
+    </div>
+    <div class="link" id="vote">
+      <div class="qr" data-path="vote.html"></div>
+      <div><h2>💖 사진 투표</h2><p>마음에 드는 사진에 하트 3개</p><span class="state"></span></div>
+    </div>
+  </div>
 </main>
 <script>
   let last = null;
@@ -55,6 +75,27 @@
     }
   }
   tick();
+
+  // 사진 공모전 QR: 시트 config의 제출·투표 단계에 따라 흐리게 표시
+  const BASE = new URL(".", location.href).href;
+  document.querySelectorAll(".qr").forEach(el => {
+    if (window.QRCode) new QRCode(el, { text: BASE + el.dataset.path, width: 256, height: 256, correctLevel: QRCode.CorrectLevel.M });
+  });
+  function phase(id, open, closedText) {
+    const el = document.getElementById(id);
+    el.classList.toggle("off", !open);
+    el.querySelector(".state").textContent = open ? "" : closedText;
+  }
+  async function contestTick() {
+    try {
+      const res = await fetch(API + "?api=gallery", { credentials: "omit" });
+      const g = await res.json();
+      phase("submit", g.submit_open, "제출 마감");
+      phase("vote", g.vote_open, "투표 닫힘");
+    } catch (e) {}
+    setTimeout(contestTick, 15000);
+  }
+  contestTick();
 </script>
 </body>
 </html>
