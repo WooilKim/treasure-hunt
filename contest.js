@@ -1,5 +1,5 @@
 // 사진 공모전 화면 공통: API 호출 · 본인 확인 · 사진 축소
-const API = "https://script.google.com/macros/s/AKfycbzyutzVn-DOAiLSCu-HCLTPK896NtdJvj74GlkOLojGBbI0Zn_k-ImG5G2n1IK3fpTCjQ/exec";
+const API = "https://script.google.com/macros/s/AKfycby8HKXqPkX97I2Guch5uwMnYZJr5NBnLK8Hp6E-5kx3bEi8hus9x961uXILXo3azoH0/exec";
 const ME_KEY = "contest_me";
 // 서버(knox_)와 같은 규칙: 영숫자로 시작, 영숫자 . _ @ - 만, 40자 이하
 const KNOX_RE = /^[a-z0-9][a-z0-9._@-]*$/;
