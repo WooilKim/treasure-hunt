@@ -57,7 +57,7 @@
   // 투표 상태 = 서버가 마지막으로 알려 준 내 투표(server) + 아직 처리 중인 내 의도(intents)
   // 요청은 queue로 하나씩 보내 응답 순서가 뒤바뀌지 않게 한다
   // gen: 사용자 세대. 다시 입력하면 늘어나고, 이전 세대의 늦은 응답은 버린다
-  let server = new Set(), intents = new Map(), queue = [], gen = 0, runningGen = -1;
+  let server = new Set(), intents = new Map(), queue = [], gen = 0, runningGen = -1, refreshing = false;
 
   // id → { on: 마지막으로 원한 상태, n: 아직 끝나지 않은 요청 수 }
   function shown() {
@@ -150,7 +150,7 @@
     const id = Number(btn.dataset.id);
     const now = shown();
     const on = !now.has(id);
-    if (on && now.size >= g.votes_per_person) { toast(REASON.limit(g.votes_per_person)); return; }
+    if (on && now.size >= g.votes_per_person) { toast(REASON.limit(g.votes_per_person)); refresh(); return; }
     // 먼저 화면에 반영하고 요청은 줄 세워 보낸다
     const it = intents.get(id) || { on, n: 0 };
     it.on = on; it.n++;
@@ -191,6 +191,22 @@
       const r = await apiGet({ api: "gallery", knox });
       if (my === gen && r.vote_open) server = new Set(r.my_votes);
     } catch (e) {}
+  }
+
+  // 표가 다 찼을 때 서버 상태를 다시 받는다: 다른 사람이 사진을 교체하면 그 사진에 준 표가
+  // 서버에서 돌아오므로, 새로고침 없이 다시 누를 수 있게 한다 (보내는 중인 요청이 있으면 건너뜀)
+  async function refresh() {
+    if (refreshing || queue.length || runningGen === gen) return;
+    const my = gen;
+    refreshing = true;
+    try {
+      const r = await apiGet({ api: "gallery", knox: me.knox });
+      if (my === gen && !queue.length && runningGen !== gen && r.vote_open) {
+        g = r; server = new Set(r.my_votes); intents = new Map();
+        render();
+      }
+    } catch (e) {}
+    refreshing = false;
   }
 
   big.addEventListener("click", () => big.classList.remove("on"));

@@ -58,7 +58,7 @@
     job++;
     shownJob = 0;
     uploading = false;
-    const user = getMe() || await askMe(view, { emoji: "📸", title: "사진 공모전", desc: "공원에서 찍은 팀원 사진을 1장 올려 주세요.<br>이름과 Knox ID는 이 폰에 기억돼요." });
+    const user = getMe() || await askMe(view, { emoji: "📸", title: "사진 공모전", desc: "공원에서 찍은 팀원 사진을 1장 올려 주세요. (17시 마감)<br>이름과 Knox ID는 이 폰에 기억돼요." });
     if (g !== gen) return;
     me = user;
     view.innerHTML = `<div class="emoji">⏳</div><p>불러오는 중…</p>`;
@@ -83,10 +83,10 @@
       return;
     }
     view.innerHTML = s.src
-      ? `<div class="emoji">✅</div><h1>사진을 제출했어요</h1><p>마감 전까지 다른 사진으로 바꿀 수 있어요.</p>
+      ? `<div class="emoji">✅</div><h1>사진을 제출했어요</h1><p>17시까지 다른 사진으로 바꿀 수 있어요.<br>바꾸면 지금까지 받은 하트는 0개부터 다시 시작해요.</p>
          <img class="photo" src="${esc(s.src)}" alt="내 사진">
          <button class="btn ghost" id="pick">다른 사진으로 교체</button>${who()}`
-      : `<div class="emoji">📸</div><h1>사진 공모전</h1><p>공원에서 찍은 팀원 사진을 1장 올려 주세요.<br>마감 전까지 바꿀 수 있어요.</p>
+      : `<div class="emoji">📸</div><h1>사진 공모전</h1><p>공원에서 찍은 팀원 사진을 1장 올려 주세요.<br>17시까지 바꿀 수 있어요.</p>
          <button id="pick">사진 찍기 · 고르기</button>${who()}`;
     view.querySelector("#pick").onclick = pick;
     bindWho();
