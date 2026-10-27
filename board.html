@@ -89,7 +89,7 @@
     document.getElementById("teams").innerHTML = teams.map(t => {
       const [emoji, color] = TEAM[t.team] || ["🎩", "#c9b39a"];
       return `<div class="team" style="--c:${color}"><h3>${emoji} ${esc(t.team)} <small>${t.members.length}명</small></h3>
-        <ul>${t.members.map(m => `<li>${esc(m)}</li>`).join("")}</ul></div>`;
+        <ul>${t.members.map(m => `<li>${m.no ? `<b>${m.no}</b> ` : ""}${esc(m.name)}</li>`).join("")}</ul></div>`;
     }).join("");
   }
   const API = "https://script.google.com/macros/s/AKfycby8HKXqPkX97I2Guch5uwMnYZJr5NBnLK8Hp6E-5kx3bEi8hus9x961uXILXo3azoH0/exec";

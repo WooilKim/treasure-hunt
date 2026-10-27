@@ -18,6 +18,7 @@
   input { width:100%; font-size:17px; padding:13px 14px; border:1.5px solid #4a3d68; border-radius:12px; background:#1f1834; color:var(--ink); }
   input:focus { outline:none; border-color:var(--accent); }
   button, .btn { display:block; width:100%; margin-top:22px; padding:15px; font-size:17px; font-weight:700; color:#1d1630; background:var(--accent); border:0; border-radius:12px; text-align:center; text-decoration:none; }
+  .btn.ghost { background:transparent; color:var(--muted); border:1.5px solid #4a3d68; margin-top:10px; font-weight:600; }
   .msg { margin-top:14px; color:var(--err); font-size:14px; min-height:1em; }
   .who { margin-top:18px; font-size:13px; }
   .who a { color:var(--muted); }
@@ -28,6 +29,9 @@
   .crest { font-size:84px; animation:pop .6s cubic-bezier(.2,1.6,.4,1); }
   @keyframes pop { from { transform:scale(.2); opacity:0; } to { transform:scale(1); opacity:1; } }
   .name { font-size:34px; font-weight:900; color:var(--team); margin:6px 0; }
+  .no { font-size:64px; font-weight:900; line-height:1; color:var(--ink); margin:4px 0; }
+  .no small { font-size:24px; color:var(--muted); margin-left:4px; }
+  .remember { margin-top:14px; padding:12px; border-radius:12px; background:rgba(255,255,255,.08); color:var(--ink); line-height:1.5; }
   .board { margin-top:16px; font-size:14px; }
   .board a { color:var(--accent); }
 </style>
@@ -45,6 +49,7 @@
   };
   const NAMES = Object.keys(TEAM);
   const view = document.getElementById("view");
+  const DONE_KEY = "team_done"; // 이 폰에서 팀을 받은 Knox ID 목록 (참석 확인을 다시 묻지 않음)
   let gen = 0; // 다시 입력하면 증가: 이전 사용자의 늦은 응답은 버린다
 
   function who(me) {
@@ -53,10 +58,36 @@
 
   function plain() { view.classList.remove("team"); view.style.removeProperty("--team"); }
 
+  function doneList() { try { const v = JSON.parse(localStorage.getItem(DONE_KEY)); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
+  function done(knox) { return doneList().includes(knox); }
+  function markDone(knox) { try { if (!done(knox)) localStorage.setItem(DONE_KEY, JSON.stringify(doneList().concat(knox))); } catch (e) {} }
+
+  // 팀을 뽑기 전에 한 번 묻는다: 불참자가 뽑으면 팀 인원과 번호가 비게 된다
+  function askAttend() {
+    return new Promise(resolve => {
+      view.innerHTML = `<div class="emoji">🎉</div><h1>오늘 행사에 참석하시나요?</h1>
+        <p>참석하시는 분만 팀을 뽑아 주세요.<br>뽑은 팀과 번호는 바꿀 수 없어요.</p>
+        <button id="yes">네, 참석해요 · 팀 뽑기</button>
+        <button class="btn ghost" id="no">아니요, 참석하지 않아요</button>`;
+      view.querySelector("#yes").onclick = () => resolve(true);
+      view.querySelector("#no").onclick = () => resolve(false);
+    });
+  }
+
   async function start() {
     const g = ++gen;
     plain();
-    const me = getMe() || await askMe(view, { emoji: "🎩", title: "분류 모자", desc: "모자가 여러분의 팀을 정해 줄 거예요.<br>이름과 Knox ID는 이 폰에 기억돼요." });
+    const known = getMe();
+    if (!(known && done(known.knox))) {
+      const yes = await askAttend();
+      if (g !== gen) return;
+      if (!yes) {
+        view.innerHTML = `<div class="emoji">👋</div><h1>다음에 함께해요!</h1><p>참석하게 되면 이 화면에서 다시 팀을 뽑아 주세요.</p><button id="back">처음으로</button>`;
+        view.querySelector("#back").onclick = start;
+        return;
+      }
+    }
+    const me = known || await askMe(view, { emoji: "🎩", title: "분류 모자", desc: "모자가 여러분의 팀을 정해 줄 거예요.<br>이름과 Knox ID는 이 폰에 기억돼요." });
     if (g !== gen) return;
     sort(me, g);
   }
@@ -79,7 +110,7 @@
     }
     clearInterval(timer);
     if (g !== gen) return;
-    if (r.status === "ok" && TEAM[r.team]) return reveal(me, r);
+    if (r.status === "ok" && TEAM[r.team]) { markDone(me.knox); return reveal(me, r); }
     view.innerHTML = r.status === "bad_input"
       ? `<div class="emoji">✏️</div><h1>입력을 확인해 주세요</h1><p>이름은 30자 이하, ${KNOX_HELP}</p><button id="retry">다시 입력</button>`
       : `<div class="emoji">📶</div><h1>연결이 원활하지 않아요</h1><button id="retry">다시 시도</button>`;
@@ -95,8 +126,10 @@
     view.classList.add("team");
     view.innerHTML = `<div class="crest">${t.emoji}</div>
       <p>${r.assigned ? "모자가 외쳤어요!" : `${esc(me.name)} 님의 팀은`}</p>
-      <div class="name">${esc(r.team)}!</div>
+      <div class="name">${esc(r.team)}</div>
+      <div class="no">${r.no}<small>번</small></div>
       <p>${t.motto}</p>
+      <div class="remember">📌 <b>${esc(r.team)} ${r.no}번</b>, 꼭 기억해 주세요!<br>게임 때 "${esc(r.team)} ${r.no}번 나오세요"처럼 불러요.</div>
       <p class="board"><a href="board.html">현황판에서 팀원 보기 →</a></p>
       ${who(me)}`;
     bindWho();
