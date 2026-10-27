@@ -28,6 +28,14 @@
   .link p { margin:6px 0 0; color:var(--muted); font-size:clamp(13px,1.6vw,20px); }
   .link .state { display:inline-block; margin-top:8px; padding:2px 10px; border-radius:99px; background:var(--bar); font-size:clamp(12px,1.4vw,16px); }
   .link .state:empty { display:none; }
+  .link.wide { grid-column:1 / -1; }
+  .teams { display:grid; grid-template-columns:repeat(4,1fr); gap:clamp(8px,1.5vw,16px); margin:clamp(14px,3vh,36px) auto 0; max-width:1000px; text-align:left; }
+  .team { border-radius:16px; padding:12px 14px; background:rgba(255,246,234,.06); border-top:5px solid var(--c); }
+  .team h3 { margin:0; font-size:clamp(16px,2vw,22px); color:var(--c); display:flex; justify-content:space-between; gap:6px; }
+  .team h3 small { color:var(--muted); font-weight:600; font-size:.75em; align-self:center; }
+  .team ul { list-style:none; margin:8px 0 0; padding:0; display:flex; flex-wrap:wrap; gap:4px 6px; }
+  .team li { font-size:clamp(12px,1.4vw,15px); background:rgba(255,246,234,.08); padding:2px 8px; border-radius:99px; }
+  @media (max-width:640px) { .teams { grid-template-columns:1fr 1fr; } }
 </style>
 </head>
 <body>
@@ -40,6 +48,9 @@
   <div class="meta" id="meta"></div>
   <div class="recent" id="recent"></div>
   <div class="links">
+    <a class="link wide" href="team.html">
+      <h2>🎩 팀 배정</h2><p>분류 모자가 4팀 중 하나로 정해 줘요</p>
+    </a>
     <a class="link" id="submit" href="photo.html">
       <h2>📸 사진 제출</h2><p>팀원 사진 1장 올리기</p><span class="state"></span>
     </a>
@@ -47,6 +58,7 @@
       <h2>💖 사진 투표</h2><p>하트 3개로 투표</p><span class="state"></span>
     </a>
   </div>
+  <div class="teams" id="teams"></div>
 </main>
 <script>
   let last = null;
@@ -58,6 +70,19 @@
     document.getElementById("fill").style.width = (s.total ? s.claimed / s.total * 100 : 0) + "%";
     document.getElementById("meta").textContent = `전체 ${s.total}개 중 ${s.claimed}개 발견`;
     document.getElementById("recent").textContent = s.recent.length ? "최근 발견: " + s.recent.map(n => "#" + n).join("  ") : "";
+    if (s.teams) renderTeams(s.teams);
+  }
+  const TEAM = {
+    "그리핀도르": ["🦁", "#e0584a"], "슬리데린": ["🐍", "#3fb56e"],
+    "래번클로": ["🦅", "#5b93e6"], "후플푸프": ["🦡", "#f0c63a"],
+  };
+  const esc = v => String(v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  function renderTeams(teams) {
+    document.getElementById("teams").innerHTML = teams.map(t => {
+      const [emoji, color] = TEAM[t.team] || ["🎩", "#c9b39a"];
+      return `<div class="team" style="--c:${color}"><h3>${emoji} ${esc(t.team)} <small>${t.members.length}명</small></h3>
+        <ul>${t.members.map(m => `<li>${esc(m)}</li>`).join("")}</ul></div>`;
+    }).join("");
   }
   const API = "https://script.google.com/macros/s/AKfycby8HKXqPkX97I2Guch5uwMnYZJr5NBnLK8Hp6E-5kx3bEi8hus9x961uXILXo3azoH0/exec";
   async function tick() {

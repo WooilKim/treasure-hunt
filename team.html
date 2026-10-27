@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>팀 배정 · 분류 모자</title>
+<style>
+  :root { --bg:#1d1630; --card:#2a2042; --ink:#f6efe2; --muted:#b9add0; --accent:#e0b84f; --err:#ff8a7a; --team:#e0b84f; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; background:radial-gradient(circle at 50% 0%, #3a2b5c, var(--bg) 70%); color:var(--ink); font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif; }
+  main { max-width:420px; margin:0 auto; padding:32px 16px; }
+  .card { background:var(--card); border-radius:20px; padding:28px 22px; box-shadow:0 6px 24px rgba(0,0,0,.3); text-align:center; border:2px solid transparent; transition:border-color .4s, background .4s; }
+  .emoji { font-size:56px; }
+  h1 { font-size:22px; margin:8px 0 4px; }
+  p { color:var(--muted); line-height:1.5; margin:6px 0; }
+  form { margin-top:20px; text-align:left; }
+  label { display:block; font-size:14px; font-weight:600; margin:14px 0 6px; }
+  input { width:100%; font-size:17px; padding:13px 14px; border:1.5px solid #4a3d68; border-radius:12px; background:#1f1834; color:var(--ink); }
+  input:focus { outline:none; border-color:var(--accent); }
+  button, .btn { display:block; width:100%; margin-top:22px; padding:15px; font-size:17px; font-weight:700; color:#1d1630; background:var(--accent); border:0; border-radius:12px; text-align:center; text-decoration:none; }
+  .msg { margin-top:14px; color:var(--err); font-size:14px; min-height:1em; }
+  .who { margin-top:18px; font-size:13px; }
+  .who a { color:var(--muted); }
+  .hat { font-size:72px; display:inline-block; animation:wobble .5s ease-in-out infinite alternate; }
+  @keyframes wobble { from { transform:rotate(-12deg); } to { transform:rotate(12deg); } }
+  .spin { font-size:24px; font-weight:800; margin-top:14px; min-height:1.4em; color:var(--muted); }
+  .card.team { border-color:var(--team); background:linear-gradient(180deg, color-mix(in srgb, var(--team) 28%, var(--card)), var(--card) 70%); }
+  .crest { font-size:84px; animation:pop .6s cubic-bezier(.2,1.6,.4,1); }
+  @keyframes pop { from { transform:scale(.2); opacity:0; } to { transform:scale(1); opacity:1; } }
+  .name { font-size:34px; font-weight:900; color:var(--team); margin:6px 0; }
+  .board { margin-top:16px; font-size:14px; }
+  .board a { color:var(--accent); }
+</style>
+</head>
+<body>
+<main><div class="card" id="view"></div></main>
+<script src="contest.js"></script>
+<script>
+  // 서버(Team.gs TEAMS)와 같은 이름
+  const TEAM = {
+    "그리핀도르": { emoji: "🦁", color: "#d4473a", motto: "용기와 대담함" },
+    "슬리데린": { emoji: "🐍", color: "#2f9e5b", motto: "야망과 지략" },
+    "래번클로": { emoji: "🦅", color: "#3f7fd9", motto: "지혜와 재치" },
+    "후플푸프": { emoji: "🦡", color: "#e8b923", motto: "성실과 의리" },
+  };
+  const NAMES = Object.keys(TEAM);
+  const view = document.getElementById("view");
+  let gen = 0; // 다시 입력하면 증가: 이전 사용자의 늦은 응답은 버린다
+
+  function who(me) {
+    return `<p class="who">${esc(me.name)} (${esc(me.knox)}) 님이 아니신가요? <a href="#" id="relogin">다시 입력</a></p>`;
+  }
+
+  function plain() { view.classList.remove("team"); view.style.removeProperty("--team"); }
+
+  async function start() {
+    const g = ++gen;
+    plain();
+    const me = getMe() || await askMe(view, { emoji: "🎩", title: "분류 모자", desc: "모자가 여러분의 팀을 정해 줄 거예요.<br>이름과 Knox ID는 이 폰에 기억돼요." });
+    if (g !== gen) return;
+    sort(me, g);
+  }
+
+  async function sort(me, g) {
+    plain();
+    view.innerHTML = `<div class="hat">🎩</div><h1>흠… 어디 보자…</h1><div class="spin" id="spin"></div>${who(me)}`;
+    bindWho();
+    const spin = view.querySelector("#spin");
+    let k = 0;
+    const timer = setInterval(() => { spin.textContent = NAMES[k++ % NAMES.length] + "?"; }, 180);
+    let r;
+    try {
+      // 연출이 너무 짧지 않게 최소 2.2초는 고민한다 (이미 배정된 사람은 짧게)
+      const [res] = await Promise.all([withTimeout(apiGet({ api: "team", name: me.name, knox: me.knox }), 20000), wait(900)]);
+      r = res;
+      if (r.status === "ok" && r.assigned) await wait(1300);
+    } catch (e) {
+      r = { status: "error" };
+    }
+    clearInterval(timer);
+    if (g !== gen) return;
+    if (r.status === "ok" && TEAM[r.team]) return reveal(me, r);
+    view.innerHTML = r.status === "bad_input"
+      ? `<div class="emoji">✏️</div><h1>입력을 확인해 주세요</h1><p>이름은 30자 이하, ${KNOX_HELP}</p><button id="retry">다시 입력</button>`
+      : `<div class="emoji">📶</div><h1>연결이 원활하지 않아요</h1><button id="retry">다시 시도</button>`;
+    view.querySelector("#retry").onclick = () => {
+      if (r.status === "bad_input") clearMe();
+      start();
+    };
+  }
+
+  function reveal(me, r) {
+    const t = TEAM[r.team];
+    view.style.setProperty("--team", t.color);
+    view.classList.add("team");
+    view.innerHTML = `<div class="crest">${t.emoji}</div>
+      <p>${r.assigned ? "모자가 외쳤어요!" : `${esc(me.name)} 님의 팀은`}</p>
+      <div class="name">${esc(r.team)}!</div>
+      <p>${t.motto}</p>
+      <p class="board"><a href="board.html">현황판에서 팀원 보기 →</a></p>
+      ${who(me)}`;
+    bindWho();
+  }
+
+  function bindWho() {
+    view.querySelector("#relogin").onclick = e => { e.preventDefault(); clearMe(); start(); };
+  }
+
+  function wait(ms) { return new Promise(ok => setTimeout(ok, ms)); }
+  // 응답이 오지 않으면 연결 오류 화면으로 넘어가 다시 시도할 수 있게 한다
+  function withTimeout(p, ms) { return Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error("timeout")), ms))]); }
+
+  start();
+</script>
+</body>
+</html>
