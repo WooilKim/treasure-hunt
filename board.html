@@ -85,15 +85,17 @@
     }).join("");
   }
   const API = "https://script.google.com/macros/s/AKfycby8HKXqPkX97I2Guch5uwMnYZJr5NBnLK8Hp6E-5kx3bEi8hus9x961uXILXo3azoH0/exec";
+  // 여러 폰이 동시에 열어 두므로 Apps Script 동시 실행 한도를 넘지 않게 10초 간격,
+  // 화면이 꺼져 있거나 다른 앱을 보는 동안은 요청하지 않는다
   async function tick() {
+    if (document.hidden) { setTimeout(tick, 10000); return; }
     try {
       const res = await fetch(API + "?api=stats", { credentials: "omit" });
       render(await res.json());
-      setTimeout(tick, 3000);
     } catch (e) {
       document.getElementById("meta").textContent = "연결 확인 중…";
-      setTimeout(tick, 5000);
     }
+    setTimeout(tick, 10000);
   }
   tick();
 
@@ -104,13 +106,14 @@
     el.querySelector(".state").textContent = open ? "" : closedText;
   }
   async function contestTick() {
+    if (document.hidden) { setTimeout(contestTick, 30000); return; }
     try {
       const res = await fetch(API + "?api=gallery", { credentials: "omit" });
       const g = await res.json();
       phase("submit", g.submit_open, "제출 마감");
       phase("vote", g.vote_open, "투표 닫힘");
     } catch (e) {}
-    setTimeout(contestTick, 15000);
+    setTimeout(contestTick, 30000);
   }
   contestTick();
 </script>
